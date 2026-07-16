@@ -54,10 +54,10 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     # Authentication
-    # "apps.authentication",
+    "apps.authentication",
 
     # Users
-    # "apps.users",
+    "apps.users",
 
     # Roles
     # "apps.roles",
@@ -72,7 +72,7 @@ LOCAL_APPS = [
     # "apps.dashboard",
 
     # Common
-    # "apps.common",
+    "apps.common",
 ]
 
 INSTALLED_APPS = (
