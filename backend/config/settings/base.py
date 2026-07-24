@@ -1,5 +1,6 @@
-from pathlib import Path
 import environ
+from pathlib import Path
+from datetime import timedelta
 
 # -----------------------------------------------------------------------------
 # Paths
@@ -19,17 +20,11 @@ environ.Env.read_env(BASE_DIR / ".env")
 # Core
 # -----------------------------------------------------------------------------
 
-SECRET_KEY = env(
-    "SECRET_KEY",
-    default="django-insecure-change-this-in-production"
-)
+SECRET_KEY = env("SECRET_KEY")
 
-DEBUG = env.bool("DEBUG", default=False)
+DEBUG = env("DEBUG")
 
-ALLOWED_HOSTS = env.list(
-    "ALLOWED_HOSTS",
-    default=["localhost", "127.0.0.1"],
-)
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
 # -----------------------------------------------------------------------------
 # Applications
@@ -60,19 +55,22 @@ LOCAL_APPS = [
     "apps.users",
 
     # Roles
-    # "apps.roles",
+    "apps.authorization",
 
     # Permissions
     # "apps.permissions",
 
     # Audit
-    # "apps.audit",
+    "apps.audit",
 
     # Dashboard
-    # "apps.dashboard",
+    "apps.dashboard",
 
     # Common
-    "apps.common",
+    # "apps.common",
+    
+    "apps.monitoring",
+    "apps.health",
 ]
 
 INSTALLED_APPS = (
@@ -141,12 +139,15 @@ WSGI_APPLICATION = "config.wsgi.application"
 # -----------------------------------------------------------------------------
 
 DATABASES = {
-    "default": env.db(
-        "DATABASE_URL",
-        default="sqlite:///" + str(BASE_DIR / "db.sqlite3"),
-    )
+    "default": {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": env("DB_NAME"),
+        "USER": env("DB_USER"),
+        "PASSWORD": env("DB_PASSWORD"),
+        "HOST": env("DB_HOST"),
+        "PORT": env("DB_PORT"),
+    }
 }
-
 # -----------------------------------------------------------------------------
 # Password Validators
 # -----------------------------------------------------------------------------
@@ -188,6 +189,18 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 
+# ======================================
+# Cache
+# ======================================
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "enterprise-uam-cache",
+        "TIMEOUT": 300,   # 5 minutes
+    }
+}
+
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 STATICFILES_DIRS = [
@@ -215,6 +228,8 @@ REST_FRAMEWORK = {
 
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
     ],
 
     "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -229,6 +244,8 @@ REST_FRAMEWORK = {
     "rest_framework.pagination.PageNumberPagination",
 
     "PAGE_SIZE": 10,
+    
+    "EXCEPTION_HANDLER": "apps.common.exceptions.custom_exception_handler",
 }
 
 # -----------------------------------------------------------------------------
@@ -240,23 +257,41 @@ SPECTACULAR_SETTINGS = {
     "TITLE": "User & Access Management API",
 
     "DESCRIPTION":
-    "Enterprise RBAC Platform",
+    """Enterprise RBAC Platform
+    
+    Authentication
+    Authorization
+    RBAC
+    Audit Logging
+    Dashboard
+    User Management
+    Role Management
+    Permission Management
+    """,
 
     "VERSION": "1.0.0",
 
     "SERVE_INCLUDE_SCHEMA": False,
+    
+    "COMPONENT_SPLIT_REQUEST": True,
+    
+    "SCHEMA_PATH_PREFIX": r"/api/v1",
+    
 }
 
 # -----------------------------------------------------------------------------
 # CORS
 # -----------------------------------------------------------------------------
 
-CORS_ALLOWED_ORIGINS = env.list(
-    "CORS_ALLOWED_ORIGINS",
-    default=[
-        "http://localhost:5173",
-    ],
-)
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+]
 
 # -----------------------------------------------------------------------------
 # Security
@@ -271,28 +306,106 @@ AUTH_PASSWORD_HASHERS = [
 # -----------------------------------------------------------------------------
 # Logging
 # -----------------------------------------------------------------------------
+LOG_DIR = BASE_DIR / "logs"
 
 LOGGING = {
-
     "version": 1,
-
     "disable_existing_loggers": False,
+
+    "formatters": {
+        "standard": {
+            "format": "[{asctime}] [{levelname}] {name} - {message}",
+            "style": "{",
+        },
+    },
 
     "handlers": {
 
         "console": {
-
             "class": "logging.StreamHandler",
+            "formatter": "standard",
+        },
 
-        }
+        "application_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOG_DIR / "application.log",
+            "maxBytes": 5 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "standard",
+        },
 
+        "error_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOG_DIR / "errors.log",
+            "level": "ERROR",
+            "maxBytes": 5 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "standard",
+        },
+
+        "audit_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOG_DIR / "audit.log",
+            "maxBytes": 5 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "standard",
+        },
+
+        "security_file": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "filename": LOG_DIR / "security.log",
+            "maxBytes": 5 * 1024 * 1024,
+            "backupCount": 5,
+            "formatter": "standard",
+        },
     },
 
-    "root": {
+    "loggers": {
 
-        "handlers": ["console"],
+        "django": {
+            "handlers": [
+                "console",
+                "application_file",
+                "error_file",
+            ],
+            "level": "INFO",
+            "propagate": False,
+        },
 
-        "level": "INFO",
+        "audit": {
+            "handlers": [
+                "audit_file",
+            ],
+            "level": "INFO",
+            "propagate": False,
+        },
 
+        "security": {
+            "handlers": [
+                "security_file",
+            ],
+            "level": "INFO",
+            "propagate": False,
+        },
     },
+}
+
+AUTH_USER_MODEL = "users.User"
+
+
+SIMPLE_JWT = {
+    # Development token lifetime
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=12),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+
+    "UPDATE_LAST_LOGIN": True,
+
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,
+
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "AUTH_TOKEN_CLASSES": ("rest_framework_simplejwt.tokens.AccessToken",),
 }

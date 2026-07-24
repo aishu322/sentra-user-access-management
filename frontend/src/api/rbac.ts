@@ -78,7 +78,7 @@ export async function getUserRoles(userId: number) {
         `/users/${userId}/roles/`
     );
 
-    return response.data;
+    return Array.isArray(response.data) ? response.data : [];
 }
 
 export async function getRoleById(roleId: number) {

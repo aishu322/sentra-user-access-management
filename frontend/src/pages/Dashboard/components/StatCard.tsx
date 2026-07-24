@@ -9,11 +9,12 @@ export default function StatCard({
 }: StatCardProps) {
     return (
         <article className="stat-card">
-            <span className="stat-card__label">{label}</span>
+            <span className="stat-card__label">
+                {label}
+            </span>
+
             <span
-                className={`stat-card__value${
-                    accent ? " stat-card__value--accent" : ""
-                }`}
+                className={`stat-card__value stat-card__value--${accent}`}
             >
                 {value}
             </span>

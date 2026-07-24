@@ -7,7 +7,15 @@ import "./UsersPage.css";
 import Modal from "../../components/Modal";
 import PaginationControls from "../../components/PaginationControls";
 import { getApiErrorMessage, getApiFieldErrors } from "../../api/error";
-import { activateUser, createUser, deactivateUser, listUsers, updateUser, type UserListItem } from "../../api/users";
+import {
+    activateUser,
+    assignRolesToUser,
+    createUser,
+    deactivateUser,
+    listUsers,
+    updateUser,
+    type UserListItem,
+} from "../../api/users";
 import { listRoles } from "../../api/roles";
 import { listAuditLogs } from "../../api/audit";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -79,7 +87,7 @@ async function loadLastLogin(email: string) {
     const response = await listAuditLogs({
         page: 1,
         pageSize: 1,
-        action: "auth.login",
+        action: "LOGIN",
         search: email,
         ordering: "-created_at",
     });
@@ -96,6 +104,7 @@ export default function UsersPage() {
     const [page, setPage] = useState(1);
     const [activeFormMode, setActiveFormMode] = useState<"create" | "edit" | null>(null);
     const [selectedUser, setSelectedUser] = useState<UserRow | null>(null);
+    const [selectedRoles, setSelectedRoles] = useState<number[]>([]);
     const [formError, setFormError] = useState("");
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
     const [formState, setFormState] = useState<UserFormState>({
@@ -105,6 +114,14 @@ export default function UsersPage() {
         lastName: "",
         isActive: true,
     });
+
+    const resetUserForm = () => {
+        setActiveFormMode(null);
+        setSelectedUser(null);
+        setSelectedRoles([]);
+        setFormError("");
+        setFieldErrors({});
+    };
 
     useEffect(() => {
         const handle = window.setTimeout(() => {
@@ -175,22 +192,28 @@ export default function UsersPage() {
 
     const totalRows = filteredUsers.length;
     const pageCount = Math.max(1, Math.ceil(totalRows / PAGE_SIZE));
-
-    useEffect(() => {
-        if (page > pageCount) {
-            setPage(pageCount);
-        }
-    }, [page, pageCount]);
-
-    const pagedUsers = filteredUsers.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    const currentPage = Math.min(page, pageCount);
+    const pagedUsers = filteredUsers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
     const createMutation = useMutation({
-        mutationFn: createUser,
+        mutationFn: async ({
+            payload,
+            roleIds,
+        }: {
+            payload: Parameters<typeof createUser>[0];
+            roleIds: number[];
+        }) => {
+            const user = await createUser(payload);
+
+            if (roleIds.length > 0) {
+                await assignRolesToUser(user.id, roleIds);
+            }
+
+            return user;
+        },
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ["users-page"] });
-            setActiveFormMode(null);
-            setFormError("");
-            setFieldErrors({});
+            resetUserForm();
         },
         onError: (error) => {
             const apiErrors = getApiFieldErrors(error);
@@ -200,13 +223,23 @@ export default function UsersPage() {
     });
 
     const updateMutation = useMutation({
-        mutationFn: async ({ userId, payload }: { userId: number; payload: Parameters<typeof updateUser>[1] }) =>
-            updateUser(userId, payload),
+        mutationFn: async ({
+            userId,
+            payload,
+            roleIds,
+        }: {
+            userId: number;
+            payload: Parameters<typeof updateUser>[1];
+            roleIds: number[];
+        }) => {
+            const user = await updateUser(userId, payload);
+            await assignRolesToUser(userId, roleIds);
+
+            return user;
+        },
         onSuccess: async () => {
             await queryClient.invalidateQueries({ queryKey: ["users-page"] });
-            setActiveFormMode(null);
-            setFormError("");
-            setFieldErrors({});
+            resetUserForm();
         },
         onError: (error) => {
             const apiErrors = getApiFieldErrors(error);
@@ -249,6 +282,7 @@ export default function UsersPage() {
 
     const openCreateUser = () => {
         setSelectedUser(null);
+        setSelectedRoles([]);
         setFormError("");
         setFieldErrors({});
         setFormState({
@@ -263,8 +297,14 @@ export default function UsersPage() {
 
     const openEditUser = (user: UserRow) => {
         setSelectedUser(user);
+
+        setSelectedRoles(
+            (user.roles ?? []).map((role) => role.role_id)
+        );
+
         setFormError("");
         setFieldErrors({});
+
         setFormState({
             email: user.email,
             password: "",
@@ -272,6 +312,7 @@ export default function UsersPage() {
             lastName: user.last_name,
             isActive: user.is_active,
         });
+
         setActiveFormMode("edit");
     };
 
@@ -302,11 +343,14 @@ export default function UsersPage() {
 
         if (activeFormMode === "create") {
             await createMutation.mutateAsync({
-                email: formState.email.trim(),
-                password: formState.password,
-                first_name: formState.firstName.trim(),
-                last_name: formState.lastName.trim(),
-                is_active: formState.isActive,
+                payload: {
+                    email: formState.email.trim(),
+                    password: formState.password,
+                    first_name: formState.firstName.trim(),
+                    last_name: formState.lastName.trim(),
+                    is_active: formState.isActive,
+                },
+                roleIds: selectedRoles,
             });
             return;
         }
@@ -322,9 +366,9 @@ export default function UsersPage() {
                 last_name: formState.lastName.trim(),
                 is_active: formState.isActive,
             },
+            roleIds: selectedRoles,
         });
     };
-
     const isSubmitting =
         createMutation.isPending || updateMutation.isPending || activateMutation.isPending || deactivateMutation.isPending;
 
@@ -369,8 +413,8 @@ export default function UsersPage() {
                                 }}
                             >
                                 <option value="all">All roles</option>
-                                {visibleRoles.map((role) => (
-                                    <option key={role.id} value={role.code}>
+                                {visibleRoles?.map((role) => (
+                                    <option key={role.id} value={role.name}>
                                         {role.name}
                                     </option>
                                 ))}
@@ -446,7 +490,9 @@ export default function UsersPage() {
                                             </td>
                                             <td>
                                                 <span className="admin-pill users-page__role-pill">
-                                                    {user.roles[0]?.role_name ?? user.roles[0]?.role_code ?? "User"}
+                                                    {user.roles.length > 0
+                                                        ? user.roles.map(role => role.role_name).join(", ")
+                                                        : "User"}
                                                 </span>
                                             </td>
                                             <td>
@@ -496,17 +542,17 @@ export default function UsersPage() {
                                 </tbody>
                             </table>
                             <PaginationControls
-                                page={page}
+                                page={currentPage}
                                 pageCount={pageCount}
                                 onPrevious={() => setPage((current) => Math.max(1, current - 1))}
                                 onNext={() => setPage((current) => Math.min(pageCount, current + 1))}
-                                isPreviousDisabled={page <= 1}
-                                isNextDisabled={page >= pageCount}
+                                isPreviousDisabled={currentPage <= 1}
+                                isNextDisabled={currentPage >= pageCount}
                             />
                             <div className="users-page__meta">
                                 <span>
-                                    {`Showing ${Math.min((page - 1) * PAGE_SIZE + 1, totalRows)}–${Math.min(
-                                        page * PAGE_SIZE,
+                                    {`Showing ${Math.min((currentPage - 1) * PAGE_SIZE + 1, totalRows)}–${Math.min(
+                                        currentPage * PAGE_SIZE,
                                         totalRows
                                     )} of ${totalRows}`}
                                 </span>
@@ -556,60 +602,122 @@ export default function UsersPage() {
                         />
                         {fieldErrors.email ? <small className="users-page__field-error">{fieldErrors.email}</small> : null}
                     </label>
-                    {activeFormMode === "create" ? (
-                        <label className="admin-field">
-                            <span>Password</span>
-                            <input
-                                type="password"
-                                value={formState.password}
-                                onChange={(event) =>
-                                    setFormState((current) => ({
-                                        ...current,
-                                        password: event.target.value,
-                                    }))
-                                }
-                            />
-                            {fieldErrors.password ? <small className="users-page__field-error">{fieldErrors.password}</small> : null}
-                        </label>
-                    ) : null}
+                {activeFormMode === "create" ? (
                     <label className="admin-field">
-                        <span>First name</span>
+                        <span>Password</span>
+
                         <input
-                            type="text"
-                            value={formState.firstName}
-                            onChange={(event) =>
-                                setFormState((current) => ({ ...current, firstName: event.target.value }))
-                            }
-                        />
-                        {fieldErrors.firstName ? <small className="users-page__field-error">{fieldErrors.firstName}</small> : null}
-                    </label>
-                    <label className="admin-field">
-                        <span>Last name</span>
-                        <input
-                            type="text"
-                            value={formState.lastName}
-                            onChange={(event) =>
-                                setFormState((current) => ({ ...current, lastName: event.target.value }))
-                            }
-                        />
-                        {fieldErrors.lastName ? <small className="users-page__field-error">{fieldErrors.lastName}</small> : null}
-                    </label>
-                    <label className="admin-field users-page__switch">
-                        <span>Status</span>
-                        <select
-                            className="admin-select"
-                            value={formState.isActive ? "active" : "inactive"}
+                            type="password"
+                            value={formState.password}
                             onChange={(event) =>
                                 setFormState((current) => ({
                                     ...current,
-                                    isActive: event.target.value === "active",
+                                    password: event.target.value,
                                 }))
                             }
-                        >
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                        </select>
+                        />
+
+                        {fieldErrors.password ? (
+                            <small className="users-page__field-error">
+                                {fieldErrors.password}
+                            </small>
+                        ) : null}
                     </label>
+                ) : null}
+
+                <label className="admin-field">
+                    <span>First name</span>
+
+                    <input
+                        type="text"
+                        value={formState.firstName}
+                        onChange={(event) =>
+                            setFormState((current) => ({
+                                ...current,
+                                firstName: event.target.value,
+                            }))
+                        }
+                    />
+
+                    {fieldErrors.firstName ? (
+                        <small className="users-page__field-error">
+                            {fieldErrors.firstName}
+                        </small>
+                    ) : null}
+                </label>
+
+                <label className="admin-field">
+                    <span>Last name</span>
+
+                    <input
+                        type="text"
+                        value={formState.lastName}
+                        onChange={(event) =>
+                            setFormState((current) => ({
+                                ...current,
+                                lastName: event.target.value,
+                            }))
+                        }
+                    />
+
+                    {fieldErrors.lastName ? (
+                        <small className="users-page__field-error">
+                            {fieldErrors.lastName}
+                        </small>
+                    ) : null}
+                </label>
+
+                <label className="admin-field users-page__switch">
+                    <span>Status</span>
+
+                    <select
+                        className="admin-select"
+                        value={formState.isActive ? "active" : "inactive"}
+                        onChange={(event) =>
+                            setFormState((current) => ({
+                                ...current,
+                                isActive: event.target.value === "active",
+                            }))
+                        }
+                    >
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </label>
+
+                <label className="admin-field">
+                    <span>Roles</span>
+
+                    <div className="users-page__roles-list">
+                        {visibleRoles.map((role) => (
+                            <label
+                                key={role.id}
+                                className="users-page__role-checkbox"
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={selectedRoles.includes(role.id)}
+                                    onChange={(event) => {
+                                        if (event.target.checked) {
+                                            setSelectedRoles((current) => [
+                                                ...current,
+                                                role.id,
+                                            ]);
+                                        } else {
+                                            setSelectedRoles((current) =>
+                                                current.filter(
+                                                    (id) => id !== role.id
+                                                )
+                                            );
+                                        }
+                                    }}
+                                />
+
+                                <span>{role.name}</span>
+                            </label>
+                        ))}
+                    </div>
+                </label>
                 </form>
             </Modal>
         </DashboardLayout>

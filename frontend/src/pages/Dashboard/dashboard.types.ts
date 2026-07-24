@@ -1,6 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 
-/* -------------------- API -------------------- */
+/* =========================
+   API RESPONSE TYPES
+========================= */
 
 export interface DashboardStatistics {
     total_users: number;
@@ -37,18 +39,22 @@ export interface UsersPerRole {
 
 export interface DashboardData {
     statistics: DashboardStatistics;
-    recent_activity: RecentActivity[];
     recent_users: RecentUser[];
+    recent_activity: RecentActivity[];
     users_per_role: UsersPerRole[];
 }
 
-/* -------------------- UI -------------------- */
+/* =========================
+   UI TYPES
+========================= */
 
 export interface DashboardStatCard {
     label: string;
     value: string;
     accent: "blue" | "green" | "orange" | "purple";
 }
+
+export type ActivityBadgeTone = "blue" | "purple" | "teal";
 
 export interface DashboardActivity {
     id: number;

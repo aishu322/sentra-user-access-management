@@ -2,13 +2,13 @@
 
 import {
     createContext,
-    useEffect,
     useContext,
+    useEffect,
     useState,
+    type ReactNode,
 } from "react";
 
 import { logout as logoutApi } from "../api/auth";
-import type { ReactNode } from "react";
 import type { AuthSession, AuthUser } from "../types/auth";
 import {
     clearStoredAuthSession,
@@ -22,7 +22,7 @@ type AuthContextType = {
     refreshToken: string | null;
     user: AuthUser | null;
     login: (session: AuthSession) => void;
-    logout: () => void;
+    logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -32,18 +32,18 @@ export function AuthProvider({
 }: {
     children: ReactNode;
 }) {
-    const initialSession = getStoredAuthSession();
+    const session = getStoredAuthSession();
 
     const [token, setToken] = useState<string | null>(
-        initialSession?.accessToken ?? null
+        session?.accessToken ?? null
     );
 
     const [refreshToken, setRefreshToken] = useState<string | null>(
-        initialSession?.refreshToken ?? null
+        session?.refreshToken ?? null
     );
 
     const [user, setUser] = useState<AuthUser | null>(
-        initialSession?.user ?? null
+        session?.user ?? null
     );
 
     useEffect(() => {
@@ -58,6 +58,7 @@ export function AuthProvider({
 
     function login(session: AuthSession) {
         setStoredAuthSession(session);
+
         setToken(session.accessToken);
         setRefreshToken(session.refreshToken);
         setUser(session.user);
@@ -68,7 +69,10 @@ export function AuthProvider({
             if (refreshToken) {
                 await logoutApi(refreshToken);
             }
-        } catch {}
+        } catch {
+            // ignore backend logout failures
+        }
+
         clearStoredAuthSession();
 
         setToken(null);

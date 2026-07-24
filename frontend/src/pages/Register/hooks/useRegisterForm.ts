@@ -43,6 +43,17 @@ export type RegisterFormValues = z.infer<
     typeof registerSchema
 >;
 
+type RegisterFieldName = keyof RegisterFormValues;
+
+function isRegisterFieldName(field: string): field is RegisterFieldName {
+    return (
+        field === "email" ||
+        field === "password" ||
+        field === "full_name" ||
+        field === "confirm_password"
+    );
+}
+
 export function useRegisterForm() {
     const navigate = useNavigate();
 
@@ -87,23 +98,14 @@ export function useRegisterForm() {
                     formError,
                 } = getApiFieldErrors(error);
 
-                Object.entries(fieldErrors).forEach(
-                    ([field, message]) => {
-
-                        if (
-                            field === "email" ||
-                            field === "password" ||
-                            field === "full_name" ||
-                            field ===
-                                "confirm_password"
-                        ) {
-                            setError(field as any, {
-                                type: "server",
-                                message,
-                            });
-                        }
+                Object.entries(fieldErrors).forEach(([field, message]) => {
+                    if (isRegisterFieldName(field)) {
+                        setError(field, {
+                            type: "server",
+                            message,
+                        });
                     }
-                );
+                });
 
                 if (formError) {
                     setSubmitError(formError);

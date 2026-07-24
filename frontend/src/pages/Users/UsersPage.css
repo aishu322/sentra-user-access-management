@@ -206,5 +206,19 @@
         justify-content: flex-start;
         flex-wrap: wrap;
     }
+
+    .users-page__roles-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: 8px;
+    }
+
+    .users-page__role-checkbox {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+    }
 }
 

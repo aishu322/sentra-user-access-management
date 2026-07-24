@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { useQuery } from "@tanstack/react-query";
 
@@ -73,12 +73,7 @@ export default function AuditPage() {
 
     const total = logsQuery.data?.count ?? 0;
     const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-    useEffect(() => {
-        if (page > pageCount) {
-            setPage(pageCount);
-        }
-    }, [page, pageCount]);
+    const currentPage = Math.min(page, pageCount);
 
     const exportQuery = useQuery({
         queryKey: ["audit-export", actionFilter],
@@ -207,17 +202,17 @@ export default function AuditPage() {
                                 </tbody>
                             </table>
                             <PaginationControls
-                                page={page}
+                                page={currentPage}
                                 pageCount={pageCount}
                                 onPrevious={() => setPage((current) => Math.max(1, current - 1))}
                                 onNext={() => setPage((current) => Math.min(pageCount, current + 1))}
-                                isPreviousDisabled={page <= 1}
-                                isNextDisabled={page >= pageCount}
+                                isPreviousDisabled={currentPage <= 1}
+                                isNextDisabled={currentPage >= pageCount}
                             />
                             <div className="audit-page__meta">
                                 <span>
-                                    {`Showing ${Math.min((page - 1) * PAGE_SIZE + 1, total)}–${Math.min(
-                                        page * PAGE_SIZE,
+                                    {`Showing ${Math.min((currentPage - 1) * PAGE_SIZE + 1, total)}–${Math.min(
+                                        currentPage * PAGE_SIZE,
                                         total
                                     )} of ${total}`}
                                 </span>

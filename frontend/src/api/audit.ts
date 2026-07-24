@@ -18,8 +18,26 @@ export type AuditQueryParams = {
     ordering?: string;
 };
 
+function normalizeAuditResponse(response: PaginatedResponse<AuditLogItem> | AuditLogItem[]) {
+    if (Array.isArray(response)) {
+        return {
+            count: response.length,
+            next: null,
+            previous: null,
+            results: response,
+        };
+    }
+
+    return {
+        count: response.count,
+        next: response.next,
+        previous: response.previous,
+        results: response.results ?? [],
+    };
+}
+
 export async function listAuditLogs(params: AuditQueryParams = {}) {
-    const response = await api.get<PaginatedResponse<AuditLogItem>>("/audit/", {
+    const response = await api.get<PaginatedResponse<AuditLogItem> | AuditLogItem[]>("/audit/", {
         params: {
             page: params.page,
             page_size: params.pageSize,
@@ -29,7 +47,7 @@ export async function listAuditLogs(params: AuditQueryParams = {}) {
         },
     });
 
-    return response.data;
+    return normalizeAuditResponse(response.data);
 }
 
 export async function getAuditLog(auditLogId: number) {
@@ -37,4 +55,3 @@ export async function getAuditLog(auditLogId: number) {
 
     return response.data;
 }
-

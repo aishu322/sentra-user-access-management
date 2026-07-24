@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -32,6 +32,11 @@ type RoleFormState = {
     isActive: boolean;
 };
 
+type PermissionGroup = {
+    title: string;
+    permissions: PermissionItem[];
+};
+
 function groupPermissions(permissions: PermissionItem[]) {
     const grouped = new Map<string, PermissionItem[]>();
 
@@ -56,10 +61,18 @@ function buildRoleDescription(role: RoleListItem | null) {
     return role.description || "No description available";
 }
 
+function rolePermissionKey(
+    roleId: number | null,
+    permissions: PermissionItem[]
+) {
+    return `${roleId ?? "none"}-${permissions
+        .map((permission) => permission.id)
+        .join(",")}`;
+}
+
 export default function RolesPage() {
     const queryClient = useQueryClient();
     const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null);
-    const [permissionDraft, setPermissionDraft] = useState<number[]>([]);
     const [roleFormOpen, setRoleFormOpen] = useState(false);
     const [editingRole, setEditingRole] = useState<RoleListItem | null>(null);
     const [roleFormError, setRoleFormError] = useState("");
@@ -98,33 +111,29 @@ export default function RolesPage() {
         },
     });
 
-    const roles = overviewQuery.data?.roles ?? [];
-    const permissions = overviewQuery.data?.permissions ?? [];
+    const roles = useMemo(() => overviewQuery.data?.roles ?? [], [overviewQuery.data?.roles]);
+    const permissions = useMemo(
+        () => overviewQuery.data?.permissions ?? [],
+        [overviewQuery.data?.permissions]
+    );
     const groupedPermissions = useMemo(() => groupPermissions(permissions), [permissions]);
 
-    useEffect(() => {
-        if (selectedRoleId || !roles.length) {
-            return;
-        }
-
-        setSelectedRoleId(roles[0].id);
-    }, [roles, selectedRoleId]);
+    const activeRoleId = selectedRoleId ?? roles[0]?.id ?? null;
 
     const selectedRoleSummary = useMemo(
-        () => roles.find((role) => role.id === selectedRoleId) ?? null,
-        [roles, selectedRoleId]
+        () => roles.find((role) => role.id === activeRoleId) ?? null,
+        [activeRoleId, roles]
     );
 
     const selectedRoleQuery = useQuery({
-        queryKey: ["role-detail", selectedRoleId],
-        queryFn: () => getRole(selectedRoleId as number),
-        enabled: Boolean(selectedRoleId),
+        queryKey: ["role-detail", activeRoleId],
+        queryFn: () => getRole(activeRoleId as number),
+        enabled: Boolean(activeRoleId),
     });
 
-    useEffect(() => {
-        const permissionIds = selectedRoleQuery.data?.permissions.map((permission) => permission.id) ?? [];
-        setPermissionDraft(permissionIds);
-    }, [selectedRoleQuery.data]);
+    const selectedRolePermissions = selectedRoleQuery.data?.permissions ?? [];
+    const selectedRoleIsSystem = selectedRoleQuery.data?.is_system ?? false;
+    const selectedRolePermissionsKey = rolePermissionKey(activeRoleId, selectedRolePermissions);
 
     const roleCounts = useMemo(() => {
         return roles.reduce<Record<string, number>>((accumulator, role) => {
@@ -233,34 +242,6 @@ export default function RolesPage() {
         });
     };
 
-    const handlePermissionToggle = async (permissionId: number) => {
-        if (!selectedRoleSummary || selectedRoleQuery.data?.is_system) {
-            return;
-        }
-
-        const nextPermissionIds = permissionDraft.includes(permissionId)
-            ? permissionDraft.filter((value) => value !== permissionId)
-            : [...permissionDraft, permissionId];
-
-        setPermissionDraft(nextPermissionIds);
-
-        try {
-            await permissionMutation.mutateAsync({
-                roleId: selectedRoleSummary.id,
-                permissionIds: nextPermissionIds,
-            });
-        } catch {
-            setPermissionDraft(
-                selectedRoleQuery.data?.permissions.map((permission) => permission.id) ?? []
-            );
-        }
-    };
-
-    const selectedRolePermissionMap = useMemo(
-        () => new Set(permissionDraft),
-        [permissionDraft]
-    );
-
     const loading = overviewQuery.isLoading && !overviewQuery.data;
     const error = overviewQuery.isError;
     const saving = createRoleMutation.isPending || updateRoleMutation.isPending || permissionMutation.isPending;
@@ -299,7 +280,7 @@ export default function RolesPage() {
                     <section className="roles-page__grid">
                         <aside className="admin-card roles-page__list" aria-label="Role list">
                             {roles.map((role) => {
-                                const isActive = role.id === selectedRoleId;
+                                const isActive = role.id === activeRoleId;
                                 const count = roleCounts[role.code.toLowerCase()] ?? 0;
 
                                 return (
@@ -330,46 +311,30 @@ export default function RolesPage() {
                                     <h2>{selectedRoleQuery.data?.name ?? selectedRoleSummary?.name ?? "Role"}</h2>
                                     <p>{selectedRoleQuery.data?.description ?? selectedRoleSummary?.description ?? ""}</p>
                                 </div>
-                                {selectedRoleQuery.data?.is_system ? (
+                                {selectedRoleIsSystem ? (
                                     <span className="roles-page__system-badge">System role — locked</span>
                                 ) : null}
                             </div>
 
                             <div className="roles-page__sections">
-                                {groupedPermissions.map((group) => (
-                                    <section key={group.title} className="roles-page__permission-group">
-                                        <h3>{group.title}</h3>
-                                        <div className="roles-page__permission-grid">
-                                            {group.permissions.map((permission) => {
-                                                const checked = selectedRolePermissionMap.has(permission.id);
-                                                const disabled = Boolean(selectedRoleQuery.data?.is_system) || saving;
+                                <RolePermissionsPanel
+                                    key={selectedRolePermissionsKey}
+                                    roleId={activeRoleId}
+                                    permissions={selectedRolePermissions}
+                                    groupedPermissions={groupedPermissions}
+                                    isSystem={selectedRoleIsSystem}
+                                    saving={saving}
+                                    onSavePermissions={async (roleId, permissionIds) => {
+                                        if (roleId === null) {
+                                            return;
+                                        }
 
-                                                return (
-                                                    <label
-                                                        key={permission.id}
-                                                        className={
-                                                            checked
-                                                                ? "roles-page__permission-card roles-page__permission-card--checked"
-                                                                : "roles-page__permission-card"
-                                                        }
-                                                    >
-                                                        <input
-                                                            type="checkbox"
-                                                            checked={checked}
-                                                            disabled={disabled}
-                                                            onChange={() => handlePermissionToggle(permission.id)}
-                                                            aria-label={permission.code}
-                                                        />
-                                                        <span className="roles-page__permission-copy">
-                                                            <strong>{permission.code}</strong>
-                                                            <span>{permission.description}</span>
-                                                        </span>
-                                                    </label>
-                                                );
-                                            })}
-                                        </div>
-                                    </section>
-                                ))}
+                                        await permissionMutation.mutateAsync({
+                                            roleId,
+                                            permissionIds,
+                                        });
+                                    }}
+                                />
                             </div>
                         </section>
                     </section>
@@ -456,6 +421,88 @@ export default function RolesPage() {
                 </form>
             </Modal>
         </DashboardLayout>
+    );
+}
+
+function RolePermissionsPanel({
+    roleId,
+    permissions,
+    groupedPermissions,
+    isSystem,
+    saving,
+    onSavePermissions,
+}: {
+    roleId: number | null;
+    permissions: PermissionItem[];
+    groupedPermissions: PermissionGroup[];
+    isSystem: boolean;
+    saving: boolean;
+    onSavePermissions: (roleId: number | null, permissionIds: number[]) => Promise<void>;
+}) {
+    const [permissionDraft, setPermissionDraft] = useState<number[]>(
+        () => permissions.map((permission) => permission.id)
+    );
+
+    const selectedPermissionIds = useMemo(
+        () => new Set(permissionDraft),
+        [permissionDraft]
+    );
+
+    const handlePermissionToggle = async (permissionId: number) => {
+        if (roleId === null || isSystem) {
+            return;
+        }
+
+        const nextPermissionIds = selectedPermissionIds.has(permissionId)
+            ? permissionDraft.filter((value) => value !== permissionId)
+            : [...permissionDraft, permissionId];
+
+        setPermissionDraft(nextPermissionIds);
+
+        try {
+            await onSavePermissions(roleId, nextPermissionIds);
+        } catch {
+            setPermissionDraft(permissions.map((permission) => permission.id));
+        }
+    };
+
+    return (
+        <>
+            {groupedPermissions.map((group) => (
+                <section key={group.title} className="roles-page__permission-group">
+                    <h3>{group.title}</h3>
+                    <div className="roles-page__permission-grid">
+                        {group.permissions.map((permission) => {
+                            const checked = selectedPermissionIds.has(permission.id);
+                            const disabled = isSystem || saving || roleId === null;
+
+                            return (
+                                <label
+                                    key={permission.id}
+                                    className={
+                                        checked
+                                            ? "roles-page__permission-card roles-page__permission-card--checked"
+                                            : "roles-page__permission-card"
+                                    }
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        disabled={disabled}
+                                        onChange={() => handlePermissionToggle(permission.id)}
+                                        aria-label={permission.code}
+                                    />
+                                    <span className="roles-page__permission-copy">
+                                        <strong>{permission.code}</strong>
+                                        <span>{permission.description}</span>
+                                    </span>
+                                </label>
+                            );
+                        })}
+                    </div>
+                </section>
+            ))}
+        </>
     );
 }
 

@@ -1,4 +1,4 @@
-import api from "axios";
+import api from "./axios";
 
 import type { AuthSession, AuthUser } from "../types/auth";
 
@@ -21,6 +21,13 @@ export type LoginResponse = {
 
 export type RefreshResponse = {
     access: string;
+};
+
+export type RegisterRequest = {
+    full_name: string;
+    email: string;
+    password: string;
+    confirm_password: string;
 };
 
 export async function login(
@@ -50,19 +57,26 @@ export async function refreshAccessToken(refresh: string) {
 }
 
 export async function getCurrentUser() {
-    const response = await api.get<ApiResponse<AuthUser>>("/auth/me/");
+    const response =
+        await api.get<ApiResponse<AuthUser>>("/auth/me/");
 
     return response.data.data;
 }
 
-export type RegisterRequest = {
-    full_name: string;
-    email: string;
-    password: string;
-    confirm_password: string;
-};
+export async function register(
+    payload: RegisterRequest
+) {
+    const response = await api.post(
+        "/auth/register/",
+        payload
+    );
 
-export async function logout(refresh: string): Promise<void> {
+    return response.data.data;
+}
+
+export async function logout(
+    refresh: string
+): Promise<void> {
     await api.post("/auth/logout/", {
         refresh,
     });

@@ -14,10 +14,10 @@ type ActivityCardProps = {
 function getBadgeTone(action: string) {
     switch (action) {
         case "LOGIN":
-            return "green";
+            return "teal";
 
         case "LOGOUT":
-            return "orange";
+            return "blue";
 
         case "CREATE_USER":
             return "blue";
@@ -26,7 +26,7 @@ function getBadgeTone(action: string) {
             return "purple";
 
         case "DELETE_USER":
-            return "red";
+            return "purple";
 
         default:
             return "blue";

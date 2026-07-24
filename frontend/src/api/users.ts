@@ -1,6 +1,12 @@
 import api from "./axios";
 import type { PaginatedResponse } from "./pagination";
 
+export type UserRole = {
+    id: number;
+    role_id: number;
+    role_name?: string;
+    role_code?: string;
+};
 export type UserListItem = {
     id: number;
     email: string;
@@ -9,6 +15,8 @@ export type UserListItem = {
     is_active: boolean;
     is_staff: boolean;
     date_joined: string;
+
+    roles?: UserRole[];
 };
 
 export type UserCreatePayload = {
@@ -36,8 +44,28 @@ export type UsersQueryParams = {
     ordering?: string;
 };
 
+type RawUsersResponse = PaginatedResponse<UserListItem> | UserListItem[];
+
+function normalizeUsersResponse(response: RawUsersResponse): PaginatedResponse<UserListItem> {
+    if (Array.isArray(response)) {
+        return {
+            count: response.length,
+            next: null,
+            previous: null,
+            results: response,
+        };
+    }
+
+    return {
+        count: response.count,
+        next: response.next,
+        previous: response.previous,
+        results: response.results ?? [],
+    };
+}
+
 export async function listUsers(params: UsersQueryParams = {}) {
-    const response = await api.get<PaginatedResponse<UserListItem>>("/users/users/", {
+    const response = await api.get<RawUsersResponse>("/users/users/", {
         params: {
             page: params.page,
             page_size: params.pageSize,
@@ -50,7 +78,7 @@ export async function listUsers(params: UsersQueryParams = {}) {
         },
     });
 
-    return response.data;
+    return normalizeUsersResponse(response.data);
 }
 
 export async function getUserById(userId: number) {
@@ -88,3 +116,16 @@ export async function deactivateUser(userId: number) {
     return response.data;
 }
 
+export async function assignRolesToUser(
+    userId: number,
+    roleIds: number[]
+) {
+    const response = await api.put(
+        `/users/${userId}/roles/`,
+        {
+            role_ids: roleIds,
+        }
+    );
+
+    return response.data;
+}

@@ -1,0 +1,23 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+
+    container_name: uam_postgres
+
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_DB: uam_db
+      POSTGRES_USER: uam_user
+      POSTGRES_PASSWORD: StrongPassword123
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

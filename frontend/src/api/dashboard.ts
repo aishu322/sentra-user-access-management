@@ -5,7 +5,9 @@ import type {
 } from "../pages/Dashboard/dashboard.types";
 
 export async function getDashboard(): Promise<DashboardData> {
-    const response = await api.get("/dashboard/");
+    const response = await api.get<DashboardData>("/dashboard/");
 
-    return response.data.data;
+    console.log("Dashboard API Response:", response.data);
+
+    return response.data;
 }
