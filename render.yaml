@@ -1,0 +1,73 @@
+services:
+
+  ########################################
+  # PostgreSQL
+  ########################################
+
+  - type: pserv
+    name: sentra-db
+    plan: free
+
+  ########################################
+  # Django API
+  ########################################
+
+  - type: web
+
+    name: sentra-api
+
+    runtime: python
+
+    plan: free
+
+    rootDir: backend
+
+    buildCommand: |
+      pip install -r requirements.txt
+      python manage.py collectstatic --noinput
+      python manage.py migrate
+      python manage.py seed_rbac
+      python manage.py seed_data
+
+    startCommand: |
+      gunicorn config.wsgi:application
+
+    envVars:
+
+      - key: DJANGO_SETTINGS_MODULE
+        value: config.settings.production
+
+      - key: SECRET_KEY
+        generateValue: true
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: sentra-db
+          property: connectionString
+
+      - key: ALLOWED_HOSTS
+        value: .onrender.com
+
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://sentra-frontend.onrender.com
+
+  ########################################
+  # React
+  ########################################
+
+  - type: web
+
+    runtime: static
+
+    name: sentra-frontend
+
+    rootDir: frontend
+
+    buildCommand: npm install && npm run build
+
+    staticPublishPath: dist
+
+    envVars:
+
+      - key: VITE_API_URL
+        value: https://sentra-api.onrender.com/api/v1
