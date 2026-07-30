@@ -22,7 +22,7 @@ environ.Env.read_env(BASE_DIR / ".env")
 
 SECRET_KEY = env("SECRET_KEY")
 
-DEBUG = env("DEBUG")
+DEBUG = env.bool("DEBUG", default=False)
 
 ALLOWED_HOSTS = env.list("ALLOWED_HOSTS")
 
@@ -87,6 +87,7 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
 
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
 
     "django.contrib.sessions.middleware.SessionMiddleware",
 
@@ -138,16 +139,21 @@ WSGI_APPLICATION = "config.wsgi.application"
 # Database
 # -----------------------------------------------------------------------------
 
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("DB_NAME"),
-        "USER": env("DB_USER"),
-        "PASSWORD": env("DB_PASSWORD"),
-        "HOST": env("DB_HOST"),
-        "PORT": env("DB_PORT"),
+if env("DATABASE_URL", default=None):
+    DATABASES = {
+        "default": env.db(),
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.postgresql",
+            "NAME": env("DB_NAME"),
+            "USER": env("DB_USER"),
+            "PASSWORD": env("DB_PASSWORD"),
+            "HOST": env("DB_HOST"),
+            "PORT": env("DB_PORT"),
+        }
+    }
 # -----------------------------------------------------------------------------
 # Password Validators
 # -----------------------------------------------------------------------------
@@ -202,6 +208,12 @@ CACHES = {
 }
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    }
+}
 
 STATICFILES_DIRS = [
     BASE_DIR / "static",
@@ -283,15 +295,16 @@ SPECTACULAR_SETTINGS = {
 # CORS
 # -----------------------------------------------------------------------------
 
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-]
-
+CORS_ALLOWED_ORIGINS = env.list(
+    "CORS_ALLOWED_ORIGINS",
+    default=["http://localhost:5173"],
+)
 CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = [
-    "http://localhost:5173",
-]
+CSRF_TRUSTED_ORIGINS = env.list(
+    "CSRF_TRUSTED_ORIGINS",
+    default=["http://localhost:5173"],
+)
 
 # -----------------------------------------------------------------------------
 # Security
