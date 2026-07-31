@@ -1,25 +1,12 @@
+databases:
+  - name: sentra-db
+    plan: free
+
 services:
-
-  ########################################
-  # PostgreSQL
-  ########################################
-
-  - type: pserv
-    name: sentra-db
-    plan: free
-
-  ########################################
-  # Django API
-  ########################################
-
   - type: web
-
     name: sentra-api
-
-    runtime: python
-
+    env: python
     plan: free
-
     rootDir: backend
 
     buildCommand: |
@@ -29,11 +16,9 @@ services:
       python manage.py seed_rbac
       python manage.py seed_data
 
-    startCommand: |
-      gunicorn config.wsgi:application
+    startCommand: gunicorn config.wsgi:application
 
     envVars:
-
       - key: DJANGO_SETTINGS_MODULE
         value: config.settings.production
 
@@ -51,16 +36,9 @@ services:
       - key: CORS_ALLOWED_ORIGINS
         value: https://sentra-frontend.onrender.com
 
-  ########################################
-  # React
-  ########################################
-
   - type: web
-
-    runtime: static
-
     name: sentra-frontend
-
+    env: static
     rootDir: frontend
 
     buildCommand: npm install && npm run build
@@ -68,6 +46,5 @@ services:
     staticPublishPath: dist
 
     envVars:
-
       - key: VITE_API_URL
         value: https://sentra-api.onrender.com/api/v1
