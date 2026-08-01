@@ -47,4 +47,4 @@ services:
 
     envVars:
       - key: VITE_API_URL
-        value: https://sentra-api.onrender.com/api/v1
+        value: https://sentra-api-8nnd.onrender.com/api/v1
