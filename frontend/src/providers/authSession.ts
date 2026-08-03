@@ -129,4 +129,12 @@ export function getStoredRefreshToken() {
     }
 
     return sessionStorage.getItem(REFRESH_TOKEN_KEY);
-}
+};
+
+export const setStoredAccessToken = (token: string): void => {
+  localStorage.setItem(ACCESS_TOKEN_KEY, token);
+};
+
+export const clearTokens = (): void => {  // ADD THIS
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+};

@@ -34,9 +34,12 @@ services:
         value: .onrender.com
 
       - key: CORS_ALLOWED_ORIGINS
-        value: https://sentra-frontend.onrender.com
+        value: https://sentra-frontend-isdo.onrender.com
 
-  - type: web
+      - key: CSRF_TRUSTED_ORIGINS
+        value: https://sentra-frontend-isdo.onrender.com
+
+  - type: static
     name: sentra-frontend
     env: static
     rootDir: frontend
